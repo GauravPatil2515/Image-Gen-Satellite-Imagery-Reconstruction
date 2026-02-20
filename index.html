@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Satellite Imagery Reconstruction</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,-apple-system,sans-serif;background:#0a0e14;color:#c9d1d9;min-height:100vh}
+.header{background:linear-gradient(135deg,#0d1117 0%,#161b22 50%,#0d1117 100%);border-bottom:1px solid #21262d;padding:24px 20px;text-align:center}
+h1{font-size:1.6em;color:#e6edf3;letter-spacing:-.5px}
+h1 span{color:#58a6ff}
+.sub{color:#7d8590;font-size:.82em;margin-top:4px}
+.main{max-width:860px;margin:0 auto;padding:24px 16px}
+.input-area{display:flex;gap:10px;margin-bottom:20px}
+input{flex:1;padding:12px 16px;background:#161b22;border:1px solid #30363d;color:#e6edf3;font-size:15px;border-radius:8px;font-family:inherit;transition:border .2s,box-shadow .2s}
+input:focus{outline:none;border-color:#58a6ff;box-shadow:0 0 0 3px rgba(88,166,255,.15)}
+input::placeholder{color:#484f58}
+button{padding:12px 24px;background:linear-gradient(135deg,#238636,#2ea043);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap;font-family:inherit;transition:transform .1s,box-shadow .2s;letter-spacing:.3px}
+button:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(35,134,54,.4)}
+button:active{transform:translateY(0)}
+button:disabled{background:#21262d;color:#484f58;cursor:wait;transform:none;box-shadow:none}
+.presets{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px}
+.presets span{padding:5px 12px;background:#161b22;border:1px solid #30363d;border-radius:20px;font-size:.75em;color:#8b949e;cursor:pointer;transition:all .2s}
+.presets span:hover{border-color:#58a6ff;color:#58a6ff;background:#161b2e}
+.result{display:none;animation:fadeUp .4s ease}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.pipeline{display:flex;align-items:stretch;gap:0;margin-bottom:16px;background:#161b22;border:1px solid #21262d;border-radius:10px;overflow:hidden}
+.stage{flex:1;padding:12px;text-align:center;position:relative;min-width:0}
+.stage+.stage{border-left:1px solid #21262d}
+.stage-label{font-size:.65em;color:#7d8590;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;font-weight:600}
+.stage img{width:100%;border-radius:4px;background:#0d1117;display:block;aspect-ratio:1/1;object-fit:contain}
+.stage .pixelated{image-rendering:pixelated}
+.arrow-col{display:flex;align-items:center;justify-content:center;padding:0 2px;color:#30363d;font-size:1.2em;background:#13171d}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:16px}
+.metric{background:#161b22;border:1px solid #21262d;border-radius:8px;padding:10px 12px;text-align:center}
+.metric-val{font-size:1.3em;font-weight:700;color:#e6edf3}
+.metric-val.blue{color:#58a6ff}
+.metric-val.green{color:#3fb950}
+.metric-val.amber{color:#d29922}
+.metric-label{font-size:.65em;color:#7d8590;text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+.analysis{padding:14px;background:#161b22;border:1px solid #21262d;border-radius:8px;font-size:.85em;color:#8b949e;line-height:1.6;margin-bottom:12px}
+.analysis strong{color:#c9d1d9}
+.footer-bar{display:flex;justify-content:space-between;align-items:center;font-size:.7em;color:#484f58;padding:0 4px}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:.7em;font-weight:600}
+.badge.gan{background:#1a2332;color:#58a6ff;border:1px solid #1f3a5f}
+.badge.ai{background:#1a3220;color:#3fb950;border:1px solid #24582d}
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid #30363d;border-top-color:#58a6ff;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-state .stage img{opacity:.3}
+.loading-state .analysis{color:#58a6ff}
+.history{margin-top:24px;border-top:1px solid #21262d;padding-top:16px}
+.history h3{font-size:.8em;color:#7d8590;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px}
+.history-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:8px}
+.history-grid img{width:100%;border-radius:4px;border:1px solid #21262d;cursor:pointer;transition:transform .2s,border-color .2s;aspect-ratio:1/1;object-fit:cover}
+.history-grid img:hover{transform:scale(1.05);border-color:#58a6ff}
+</style>
+</head>
+<body>
+<div class="header">
+<h1>&#127760; Satellite <span>Imagery Reconstruction</span></h1>
+<p class="sub">GAN-powered enhancement &mdash; describe terrain, generate unique satellite views every time</p>
+</div>
+<div class="main">
+<div class="input-area">
+<input id="inp" placeholder="Describe terrain: coastal city, mountain forest, desert oasis..." autofocus />
+<button id="btn" onclick="run()">&#9654; Reconstruct</button>
+</div>
+<div class="presets" id="presets"></div>
+<div class="result" id="res">
+<div class="pipeline" id="pipeline">
+<div class="stage"><div class="stage-label">Low-Res Input (32&times;32)</div><img id="lo" class="pixelated" alt="low-res" /></div>
+<div class="arrow-col">&#10140;</div>
+<div class="stage"><div class="stage-label">GAN Enhanced</div><img id="mid" alt="enhanced" /></div>
+<div class="arrow-col">&#10140;</div>
+<div class="stage"><div class="stage-label">Super-Resolution (256&times;256)</div><img id="hi" alt="super-res" /></div>
+</div>
+<div class="metrics" id="metrics"></div>
+<div class="analysis" id="info"></div>
+<div class="footer-bar">
+<div id="method"></div>
+<div id="ts"></div>
+</div>
+</div>
+<div class="history" id="hist" style="display:none">
+<h3>Generation History</h3>
+<div class="history-grid" id="hgrid"></div>
+</div>
+</div>
+<script>
+var presets=["coastal city with harbor","snow-capped mountains","tropical island reef","sahara desert dunes","dense rainforest","urban downtown","farmland with river","arctic tundra","volcanic island","alpine village"];
+var hist=[];
+var ps=document.getElementById("presets");
+presets.forEach(function(p){var s=document.createElement("span");s.textContent=p;s.onclick=function(){document.getElementById("inp").value=p;run();};ps.appendChild(s);});
+function parseMetrics(txt){
+var m=[];
+var wp=txt.match(/Water:\s*([\d.]+)%/);if(wp)m.push({v:wp[1]+"%",l:"Water Cover",c:"blue"});
+var lp=txt.match(/Land:\s*([\d.]+)%/);if(lp)m.push({v:lp[1]+"%",l:"Land Mass",c:"green"});
+var sp=txt.match(/Shore:\s*([\d.]+)%/);if(sp)m.push({v:sp[1]+"%",l:"Shoreline",c:"amber"});
+var psnr=txt.match(/PSNR:\s*([\d.]+)/);if(psnr)m.push({v:psnr[1]+"dB",l:"PSNR",c:"green"});
+var ssim=txt.match(/SSIM:\s*([\d.]+)/);if(ssim)m.push({v:ssim[1],l:"SSIM",c:"blue"});
+var ft=txt.match(/Features:\s*(.+?)(\||$)/);if(ft)m.push({v:ft[1].trim().split(",").length+"",l:"Features Found",c:"amber"});
+return m;
+}
+async function run(){
+var b=document.getElementById("btn"),r=document.getElementById("res"),inp=document.getElementById("inp"),pl=document.getElementById("pipeline");
+b.disabled=true;b.innerHTML='<span class="spinner"></span>Generating...';
+r.style.display="block";pl.classList.add("loading-state");
+document.getElementById("info").innerHTML='<span class="spinner"></span> Analyzing terrain and reconstructing satellite imagery...';
+document.getElementById("metrics").innerHTML="";
+["lo","mid","hi"].forEach(function(x){document.getElementById(x).src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";});
+var t0=performance.now();
+try{
+var resp=await fetch("/solve",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({data:inp.value})});
+var d=await resp.json();
+var dt=((performance.now()-t0)/1000).toFixed(2);
+document.getElementById("lo").src=d.lowres;
+document.getElementById("mid").src=d.midres;
+document.getElementById("hi").src=d.output;
+var ms=parseMetrics(d.analysis);
+var mhtml="";ms.forEach(function(x){mhtml+='<div class="metric"><div class="metric-val '+x.c+'">'+x.v+'</div><div class="metric-label">'+x.l+'</div></div>';});
+mhtml+='<div class="metric"><div class="metric-val">'+dt+'s</div><div class="metric-label">Gen Time</div></div>';
+document.getElementById("metrics").innerHTML=mhtml;
+var isAI=d.method==="ai";
+document.getElementById("method").innerHTML='<span class="badge '+(isAI?"ai":"gan")+'">'+(isAI?"AI Model":"Local GAN")+'</span> &nbsp;Prompt: "'+d.prompt+'"';
+document.getElementById("ts").textContent=new Date().toLocaleTimeString();
+var parts=d.analysis.split("|").map(function(s){return s.trim();}).filter(function(s){return s;});
+var infoHtml="<strong>Reconstruction Analysis</strong><br>";
+parts.forEach(function(p){infoHtml+="&#8226; "+p+"<br>";});
+document.getElementById("info").innerHTML=infoHtml;
+hist.unshift(d.output);
+if(hist.length>12)hist.pop();
+var hd=document.getElementById("hist"),hg=document.getElementById("hgrid");
+hd.style.display="block";hg.innerHTML="";
+hist.forEach(function(src){var im=document.createElement("img");im.src=src;im.title="Click to enlarge";im.onclick=function(){window.open(src);};hg.appendChild(im);});
+}catch(e){document.getElementById("info").innerHTML="<strong>Error:</strong> "+e.message;}
+pl.classList.remove("loading-state");
+b.disabled=false;b.innerHTML="&#9654; Reconstruct";
+}
+document.getElementById("inp").addEventListener("keydown",function(e){if(e.key==="Enter")run();});
+</script>
+</body>
+</html>
